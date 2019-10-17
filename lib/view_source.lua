@@ -43,12 +43,35 @@ end
 -- Webview used to load URI source
 local loader_view = webview.new("about:blank", { private = true })
 
+local function analyze_tag (tag)
+    local s = "&lt;"
+    local name, attributes = tag:match("(%S+)%s*(.*)")
+    if name then
+        s = s .. "<span class='tag " .. name:gsub("/", "") .. "'>" .. name .. "</span>"
+        if attributes:match("%S") then
+            attributes = attributes:gsub("([%a-]-)=", "<span class='attribute %1'>%1</span>=")
+            attributes = attributes:gsub("&quot;.-&quot;", "<span class='string'>%0</span>")
+            attributes = attributes:gsub("&apos;.-&apos;", "<span class='string'>%0</span>")
+            s = s .. " " .. attributes
+        end
+    else
+        s = tag
+    end
+    s = s .. "&gt;"
+    return  s
+end
+
 local get_source_for_view = function (target_view)
     local source = target_view:get_source()
 
     local lines = lousy.util.string.split(source, "\r?\n")
     for i, line in ipairs(lines) do
-        lines[i] = lousy.util.escape(line)
+        line = lousy.util.escape(line)
+        -- Hopefully they match.
+        line = line:gsub("&lt;!%-%-", "<div class='comment'>%0")
+        line = line:gsub("%-%-&gt;", "%0</div>")
+        line = line:gsub("&lt;([%a/].-)&gt;", analyze_tag)
+        lines[i] = line
     end
 
     local css_vars = ([==[
@@ -88,6 +111,8 @@ local load_view_source_uri = function ()
         html, body {
             margin: 0;
             width: 100%%;
+            color: black;
+            background: lightgrey;
         }
         pre span.line:first-child{
             counter-reset: linecounter;
@@ -96,16 +121,22 @@ local load_view_source_uri = function ()
             counter-increment: linecounter;
         }
         span.line:before {
-            background: #f8f8f8;
             content: counter(linecounter);
             -webkit-user-select: none;
             width: calc(var(--line-max-num-chars)*1ch);
             display: inline-block;
-            color: #888;
             text-align: right;
             padding: 0.125em 1ch;
             font-size: 0.8em;
         }
+
+        div.comment { color: red }
+        span.tag { color: blue; }
+        span.tag.head { color: red; }
+        span.attribute { font-weight: bold }
+        span.attribute.href {color: green}
+        span.string { color: #ff4444; }
+
         span.lex.tag { color: #a33243; }
         span.lex.element{ color: #844631; }
         span.lex.comment { color: #558817; }
